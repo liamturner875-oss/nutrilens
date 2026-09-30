@@ -4764,3 +4764,2809 @@ const Toggle = React.forwardRef(({ className, variant, size, ...props }, ref) =>
 Toggle.displayName = TogglePrimitive.Root.displayName
 
 export { Toggle, toggleVariants }
+"use client"
+
+import * as React from "react"
+import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+
+import { cn } from "@/lib/utils"
+
+const TooltipProvider = TooltipPrimitive.Provider
+
+const Tooltip = TooltipPrimitive.Root
+
+const TooltipTrigger = TooltipPrimitive.Trigger
+
+const TooltipContent = React.forwardRef(({ className, sideOffset = 4, ...props }, ref) => (
+  <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props} />
+  </TooltipPrimitive.Portal>
+))
+TooltipContent.displayName = TooltipPrimitive.Content.displayName
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+import * as React from "react"
+import { useSize } from "../../hooks/use-size"
+import { cn } from "../../lib/utils"
+import { DEFAULT_TRANSFORM_WIDTH, getImagePreviewClassName } from "./image-helpers"
+
+export function useResponsiveImage({ parsed, fittingType, focalPoint, quality, className, onLoad, onSourceChange }, parentRef) {
+  const wrapperRef = React.useRef(null)
+  const imgRef = React.useRef(null)
+  const size = useSize(wrapperRef)
+  const [loaded, setLoaded] = React.useState(false)
+
+  React.useImperativeHandle(parentRef, () => imgRef.current)
+  React.useEffect(() => setLoaded(false), [parsed.baseUrl])
+  React.useEffect(() => {
+    const wrapper = wrapperRef.current
+    const replace = (event) => onSourceChange(
+      event.detail.src, getImagePreviewClassName(className, wrapper.className, cn("inline-block relative", className))
+    )
+    wrapper.addEventListener("base44:image-replace", replace)
+    return () => wrapper.removeEventListener("base44:image-replace", replace)
+  }, [className, onSourceChange])
+
+  const crop = fittingType !== "fit"
+  // Wait for useSize's pre-paint measurement before requesting a transform.
+  const options = size && {
+    width: size.width || DEFAULT_TRANSFORM_WIDTH,
+    height: size.height || undefined,
+    crop,
+    focalPoint: crop ? focalPoint : undefined,
+    quality,
+  }
+
+  return {
+    wrapperRef, imgRef, loaded, options,
+    handleLoad: (event) => {
+      setLoaded(true)
+      onLoad?.(event)
+    },
+  }
+}
+// Inspired by react-hot-toast library
+import { useState, useEffect } from "react";
+
+const TOAST_LIMIT = 20;
+const TOAST_REMOVE_DELAY = 1000000;
+
+const actionTypes = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+};
+
+let count = 0;
+
+function genId() {
+  count = (count + 1) % Number.MAX_VALUE;
+  return count.toString();
+}
+
+const toastTimeouts = new Map();
+
+const addToRemoveQueue = (toastId) => {
+  if (toastTimeouts.has(toastId)) {
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId);
+    dispatch({
+      type: actionTypes.REMOVE_TOAST,
+      toastId,
+    });
+  }, TOAST_REMOVE_DELAY);
+
+  toastTimeouts.set(toastId, timeout);
+};
+
+const _clearFromRemoveQueue = (toastId) => {
+  const timeout = toastTimeouts.get(toastId);
+  if (timeout) {
+    clearTimeout(timeout);
+    toastTimeouts.delete(toastId);
+  }
+};
+
+export const reducer = (state, action) => {
+  switch (action.type) {
+    case actionTypes.ADD_TOAST:
+      return {
+        ...state,
+        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+      };
+
+    case actionTypes.UPDATE_TOAST:
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
+        ),
+      };
+
+    case actionTypes.DISMISS_TOAST: {
+      const { toastId } = action;
+
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
+      if (toastId) {
+        addToRemoveQueue(toastId);
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id);
+        });
+      }
+
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === toastId || toastId === undefined
+            ? {
+                ...t,
+                open: false,
+              }
+            : t
+        ),
+      };
+    }
+    case actionTypes.REMOVE_TOAST:
+      if (action.toastId === undefined) {
+        return {
+          ...state,
+          toasts: [],
+        };
+      }
+      return {
+        ...state,
+        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+      };
+  }
+};
+
+const listeners = [];
+
+let memoryState = { toasts: [] };
+
+function dispatch(action) {
+  memoryState = reducer(memoryState, action);
+  listeners.forEach((listener) => {
+    listener(memoryState);
+  });
+}
+
+function toast({ ...props }) {
+  const id = genId();
+
+  const update = (props) =>
+    dispatch({
+      type: actionTypes.UPDATE_TOAST,
+      toast: { ...props, id },
+    });
+
+  const dismiss = () =>
+    dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id });
+
+  dispatch({
+    type: actionTypes.ADD_TOAST,
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss();
+      },
+    },
+  });
+
+  return {
+    id,
+    dismiss,
+    update,
+  };
+}
+
+function useToast() {
+  const [state, setState] = useState(memoryState);
+
+  useEffect(() => {
+    listeners.push(setState);
+    return () => {
+      const index = listeners.indexOf(setState);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    };
+  }, [state]);
+
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
+  };
+}
+
+export { useToast, toast }; 
+import React, { useState } from "react";
+import { Flame, Beef, Wheat, Droplet, Check, Sparkles, Save, BookmarkPlus } from "lucide-react";
+import { Image } from "@/components/ui/image";
+import { base44 } from "@/api/base44Client";
+
+const mealTypes = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+];
+
+export default function AnalysisPanel({ analysis, photoUrl, onSave, onRevise, saving, saved }) {
+  const [mealType, setMealType] = useState("lunch");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
+  const [showRevise, setShowRevise] = useState(false);
+  const [note, setNote] = useState("");
+  const [revising, setRevising] = useState(false);
+
+  // Plausible calorie range — from the AI when provided, otherwise derived from confidence
+  const spread = Math.round((analysis.calories * (100 - (analysis.confidence || 70)) * 0.8) / 100);
+  const calLow = Math.max(0, Math.round(analysis.calories_low ?? analysis.calories - spread));
+  const calHigh = Math.round(analysis.calories_high ?? analysis.calories + spread);
+
+  const saveTemplate = async () => {
+    setTemplateSaving(true);
+    try {
+      await base44.entities.Template.create({
+        name: analysis.description,
+        description: analysis.description,
+        calories: analysis.calories,
+        protein: analysis.protein,
+        carbs: analysis.carbs,
+        fats: analysis.fats,
+        fiber: analysis.fiber || 0,
+        sodium_mg: analysis.sodium_mg || 0,
+        potassium_mg: analysis.potassium_mg || 0,
+      });
+      setTemplateSaved(true);
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-[24px] bg-white border border-[#E2E8F0] p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-500" />
+          <h3 className="font-heading font-bold text-[#0F172A]">AI Breakdown</h3>
+        </div>
+        <ScoreBadge score={analysis.confidence} />
+      </div>
+
+      <p className="text-sm font-semibold text-[#0F172A] mb-1">{analysis.description}</p>
+      {analysis.revised && (
+        <p className="text-xs text-emerald-700 mb-1">Revised per your note — original estimate {Math.round(analysis.original_calories || analysis.calories)} kcal</p>
+      )}
+      <p className="text-xs text-[#64748B] mb-4">
+        Likely range: {calLow}–{calHigh} kcal
+      </p>
+
+      {/* Macro summary row */}
+      <div className="grid grid-cols-4 gap-2 mb-5">
+        <Stat icon={Flame} label="Cal" value={Math.round(analysis.calories)} color="text-sky-600 bg-sky-50" />
+        <Stat icon={Beef} label="Protein" value={`${Math.round(analysis.protein)}g`} color="text-violet-600 bg-violet-50" />
+        <Stat icon={Wheat} label="Carbs" value={`${Math.round(analysis.carbs)}g`} color="text-amber-600 bg-amber-50" />
+        <Stat icon={Droplet} label="Fats" value={`${Math.round(analysis.fats)}g`} color="text-rose-500 bg-rose-50" />
+      </div>
+
+      {/* Micronutrients */}
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        <MiniStat label="Fiber" value={`${Math.round(analysis.fiber || 0)}g`} />
+        <MiniStat label="Sodium" value={`${Math.round(analysis.sodium_mg || 0)}mg`} />
+        <MiniStat label="Potassium" value={`${Math.round(analysis.potassium_mg || 0)}mg`} />
+      </div>
+
+      {/* Items */}
+      {analysis.items?.length > 0 && (
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide mb-2">Detected items</p>
+          <div className="space-y-2">
+            {analysis.items.map((it, i) => (
+              <div key={i} className="flex items-center justify-between text-sm py-2 px-3 rounded-xl bg-slate-50">
+                <span className="font-medium text-[#0F172A]">{it.name}</span>
+                <span className="text-[#64748B] tabular-nums">{Math.round(it.calories)} cal</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Correction flow */}
+      {analysis.revised ? null : showRevise ? (
+        <div className="mb-5">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            placeholder='e.g. "actually 1.5 cups of rice, not 1" or "no butter on the toast"'
+            className="w-full rounded-2xl border border-[#E2E8F0] p-3 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              onClick={() => setShowRevise(false)}
+              className="h-9 px-4 rounded-full text-sm font-semibold text-[#64748B] hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                setRevising(true);
+                try {
+                  await onRevise(note);
+                  setShowRevise(false);
+                  setNote("");
+                } finally {
+                  setRevising(false);
+                }
+              }}
+              disabled={revising || !note.trim()}
+              className="h-9 px-5 rounded-full bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50"
+            >
+              {revising ? "Revising…" : "Revise estimate"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowRevise(true)}
+          className="mb-5 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+        >
+          Something off? Adjust the estimate
+        </button>
+      )}
+
+      {/* Meal type selector */}
+      <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide mb-2">Meal type</p>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {mealTypes.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setMealType(t.value)}
+            className={`px-3.5 h-9 rounded-full text-sm font-medium border transition ${
+              mealType === t.value
+                ? "bg-[#0F172A] text-white border-[#0F172A]"
+                : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={saveTemplate}
+        disabled={templateSaving || templateSaved}
+        className="w-full h-11 rounded-full border border-[#E2E8F0] text-sm font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-60 transition mb-2 flex items-center justify-center gap-2"
+      >
+        {templateSaved ? (
+          <><Check className="w-4 h-4" /> Saved to quick add</>
+        ) : templateSaving ? (
+          "Saving…"
+        ) : (
+          <><BookmarkPlus className="w-4 h-4" /> Save as quick-add meal</>
+        )}
+      </button>
+      <button
+        onClick={() => onSave(mealType)}
+        disabled={saving || saved}
+        className="w-full h-12 rounded-full bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2 hover:bg-emerald-600 disabled:opacity-60 transition"
+      >
+        {saved ? (
+          <><Check className="w-4 h-4" /> Saved to log</>
+        ) : saving ? (
+          "Saving…"
+        ) : (
+          <><Save className="w-4 h-4" /> Log this meal</>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value, color }) {
+  return (
+    <div className={`rounded-2xl p-2.5 flex flex-col items-center gap-1 ${color.split(" ")[1]}`}>
+      <Icon className={`w-4 h-4 ${color.split(" ")[0]}`} />
+      <span className="text-sm font-bold text-[#0F172A] tabular-nums">{value}</span>
+      <span className="text-[10px] text-[#64748B] font-medium">{label}</span>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 py-2 text-center">
+      <p className="text-xs font-bold text-[#0F172A] tabular-nums">{value}</p>
+      <p className="text-[10px] text-[#64748B] font-medium">{label}</p>
+    </div>
+  );
+}
+
+function ScoreBadge({ score }) {
+  const s = Math.round(score || 0);
+  const tone = s >= 75 ? "emerald" : s >= 50 ? "amber" : "rose";
+  const map = {
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    amber: "bg-amber-50 text-amber-600 border-amber-200",
+    rose: "bg-rose-50 text-rose-500 border-rose-200",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${map[tone]}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+      {s}% confidence
+    </span>
+  );
+}
+import React from "react";
+
+export default function AuthLayout({ icon: Icon, title, subtitle, footer, children }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
+            <Icon className="w-7 h-7 text-primary-foreground" aria-hidden="true" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+          {subtitle && <p className="text-muted-foreground mt-2">{subtitle}</p>}
+        </div>
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-8">
+          {children}
+        </div>
+        {footer && (
+          <p className="text-center text-sm text-muted-foreground mt-6">{footer}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import ScannerDropzone from "@/components/ScannerDropzone";
+import PortionCard from "@/components/PortionCard";
+import { fetchProductByBarcode } from "@/lib/openfoodfacts";
+import { useProfile } from "@/lib/ProfileContext";
+import { detectCountry } from "@/lib/countries";
+import { Barcode, ClipboardList } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const BARCODE_SCHEMA = {
+  type: "object",
+  properties: {
+    barcode: { type: "string" },
+    product_name: { type: "string" },
+  },
+};
+
+const LABEL_SCHEMA = {
+  type: "object",
+  properties: {
+    product_name: { type: "string" },
+    basis: { type: "string", enum: ["per_100g", "per_serving", "unknown"] },
+    serving_size_g: { type: "number" },
+    energy_kcal: { type: "number" },
+    protein_g: { type: "number" },
+    carbs_g: { type: "number" },
+    fats_g: { type: "number" },
+    fiber_g: { type: "number" },
+    sodium_mg: { type: "number" },
+    potassium_mg: { type: "number" },
+  },
+};
+
+export default function BarcodeScanner({ onResult }) {
+  const { profile } = useProfile();
+  const country = profile?.country || detectCountry();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [manual, setManual] = useState("");
+  const [product, setProduct] = useState(null);
+  const [mode, setMode] = useState("barcode"); // barcode | label
+
+  const lookupBarcode = async (code) => {
+    const found = await fetchProductByBarcode(code, country);
+    if (!found) {
+      setError(
+        `No product found for ${code} in the open food database — try searching by name instead.`
+      );
+      return;
+    }
+    setProduct(found);
+  };
+
+  const handlePhoto = async (file) => {
+    setBusy(true);
+    setError("");
+    setProduct(null);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+      const read = await base44.integrations.Core.InvokeLLM({
+        prompt:
+          "Read the barcode number from this product photo — the EAN/UPC digits printed under or over the bars. Return the digits only (no spaces or dashes), and the product name from the packaging if visible.",
+        file_urls: [file_url],
+        response_json_schema: BARCODE_SCHEMA,
+        model: "gemini_3_flash",
+      });
+      const code = (read?.barcode || "").replace(/\D/g, "");
+      if (code.length < 8) {
+        setError("Couldn't read the barcode from the photo — get closer and steady the shot, or type the digits below.");
+        return;
+      }
+      await lookupBarcode(code);
+    } catch (e) {
+      setError("Barcode lookup failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Nutrition-label mode: read the printed panel instead of looking the product up
+  const handleLabelPhoto = async (file) => {
+    setBusy(true);
+    setError("");
+    setProduct(null);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+      const read = await base44.integrations.Core.InvokeLLM({
+        prompt:
+          "Read the nutrition information panel from this product photo. " +
+          "Return the product name from the packaging if visible, and the printed values: energy in kcal (convert from kJ if only kJ is shown), protein, carbohydrates, fat and fiber in grams, sodium and potassium in milligrams. " +
+          "If the panel shows values per 100 g, set basis to per_100g. If it only shows values per serving, set basis to per_serving and include the serving size in grams (serving_size_g). " +
+          "Use 0 for any value not shown on the label.",
+        file_urls: [file_url],
+        response_json_schema: LABEL_SCHEMA,
+        model: "gemini_3_flash",
+      });
+      if (!read || (!read.energy_kcal && !read.protein_g && !read.carbs_g && !read.fats_g)) {
+        setError(
+          "Couldn't read nutrition values from that photo — take a sharper, closer shot of the panel."
+        );
+        return;
+      }
+      const serving = read.serving_size_g > 0 ? read.serving_size_g : 100;
+      const scale = read.basis === "per_serving" ? 100 / serving : 1;
+      setProduct({
+        name: read.product_name?.trim() || "Scanned product",
+        brand: "From label",
+        per100: {
+          calories: read.energy_kcal * scale,
+          protein: read.protein_g * scale,
+          carbs: read.carbs_g * scale,
+          fats: read.fats_g * scale,
+          fiber: (read.fiber_g || 0) * scale,
+          sodium_mg: (read.sodium_mg || 0) * scale,
+          potassium_mg: (read.potassium_mg || 0) * scale,
+        },
+        servingGrams: serving,
+      });
+    } catch (e) {
+      setError("Couldn't analyze that label. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleManual = async (e) => {
+    e.preventDefault();
+    const code = manual.replace(/\D/g, "");
+    if (code.length < 8) {
+      setError("Enter the full barcode digits.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setProduct(null);
+    try {
+      await lookupBarcode(code);
+    } catch (e2) {
+      setError("Barcode lookup failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (product) {
+    return (
+      <PortionCard
+        product={product}
+        onResult={onResult}
+        onBack={() => setProduct(null)}
+        backLabel="Scan again"
+      />
+    );
+  }
+
+  const isLabel = mode === "label";
+  return (
+    <div>
+      <div className="inline-flex gap-1 rounded-full bg-white border border-[#E2E8F0] p-1 mb-3">
+        <button
+          onClick={() => setMode("barcode")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-sm font-semibold transition",
+            !isLabel ? "bg-[#0F172A] text-white" : "text-[#64748B] hover:bg-slate-50"
+          )}
+        >
+          <Barcode className="w-4 h-4" /> Barcode
+        </button>
+        <button
+          onClick={() => setMode("label")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-sm font-semibold transition",
+            isLabel ? "bg-[#0F172A] text-white" : "text-[#64748B] hover:bg-slate-50"
+          )}
+        >
+          <ClipboardList className="w-4 h-4" /> Nutrition label
+        </button>
+      </div>
+      {isLabel && (
+        <p className="text-xs text-[#64748B] mb-3">
+          No barcode match? Snap the nutrition information panel on the packet — the values are read
+          straight from the label.
+        </p>
+      )}
+      <ScannerDropzone
+        onPhoto={isLabel ? handleLabelPhoto : handlePhoto}
+        analyzing={busy}
+        hint={isLabel ? "Point at the nutrition panel" : "Point at the barcode"}
+        analyzingText={isLabel ? "Reading label…" : "Reading barcode…"}
+      />
+      {error && (
+        <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3">{error}</p>
+      )}
+      {!isLabel && (
+        <form onSubmit={handleManual} className="mt-3 flex gap-2">
+          <input
+            value={manual}
+            onChange={(e) => setManual(e.target.value)}
+            inputMode="numeric"
+            placeholder="Or type the barcode digits"
+            className="flex-1 h-12 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="h-12 px-5 rounded-full bg-white border border-[#E2E8F0] text-sm font-semibold text-[#0F172A] hover:bg-slate-50 disabled:opacity-50"
+          >
+            Look up
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+import React, { useRef, useState } from "react";
+import { Mic, MicOff, Sparkles } from "lucide-react";
+
+export default function DescribeMeal({ onAnalyze, analyzing }) {
+  const [text, setText] = useState("");
+  const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
+  const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const supported = !!SR;
+
+  const toggleMic = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const last = e.results[e.results.length - 1];
+      const chunk = last[0].transcript.trim();
+      if (chunk) setText((t) => (t ? `${t} ${chunk}` : chunk));
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
+  const submit = () => {
+    if (!text.trim() || analyzing) return;
+    onAnalyze(text.trim());
+  };
+
+  return (
+    <div className="rounded-[24px] bg-white border border-[#E2E8F0] p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-1">
+        <Sparkles className="w-4 h-4 text-emerald-500" />
+        <h3 className="font-heading font-bold text-[#0F172A]">Describe your meal</h3>
+      </div>
+      <p className="text-xs text-[#64748B] mb-3">
+        Type or speak naturally — "two eggs, toast with butter, and a protein shake".
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={4}
+        placeholder="What did you eat?"
+        className="w-full rounded-2xl border border-[#E2E8F0] p-4 text-sm text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+      />
+      <div className="flex items-center justify-between mt-3">
+        <button
+          onClick={toggleMic}
+          disabled={!supported}
+          className={`h-11 px-4 rounded-full text-sm font-semibold border transition flex items-center gap-2 disabled:opacity-50 ${
+            listening
+              ? "bg-rose-50 text-rose-600 border-rose-200 animate-pulse"
+              : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+          }`}
+        >
+          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {listening ? "Tap to stop" : "Dictate"}
+        </button>
+        <button
+          onClick={submit}
+          disabled={analyzing || !text.trim()}
+          className="h-11 px-6 rounded-full bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition"
+        >
+          {analyzing ? "Analyzing…" : "Analyze"}
+        </button>
+      </div>
+      {!supported && (
+        <p className="text-[11px] text-[#64748B] mt-2">
+          Voice dictation isn't available in this browser — typing works everywhere.
+        </p>
+      )}
+    </div>
+  );
+}
+import React, { useState } from "react";
+import { useMeals } from "@/lib/MealContext";
+import ItemProductPicker from "@/components/ItemProductPicker";
+import { X, Plus, Trash2, Scale, Save, Loader2, Search } from "lucide-react";
+
+const ITEM_FIELDS = [
+  { key: "calories", label: "Cal" },
+  { key: "protein", label: "Protein (g)" },
+  { key: "carbs", label: "Carbs (g)" },
+  { key: "fats", label: "Fats (g)" },
+];
+
+const TOTAL_FIELDS = [
+  { key: "calories", label: "Calories" },
+  { key: "protein", label: "Protein (g)" },
+  { key: "carbs", label: "Carbs (g)" },
+  { key: "fats", label: "Fats (g)" },
+  { key: "fiber", label: "Fiber (g)" },
+  { key: "sodium_mg", label: "Sodium (mg)" },
+  { key: "potassium_mg", label: "Potassium (mg)" },
+];
+
+const MEAL_TYPES = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+];
+
+const n = (v) => {
+  const x = parseFloat(v);
+  return Number.isFinite(x) ? x : 0;
+};
+
+const inputCls =
+  "h-9 w-full rounded-xl border border-[#E2E8F0] px-2.5 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400 tabular-nums";
+
+export default function EditMealDialog({ meal, onClose }) {
+  const { updateMeal } = useMeals();
+  const [description, setDescription] = useState(meal.description || "");
+  const [mealType, setMealType] = useState(meal.meal_type || "snack");
+  const [items, setItems] = useState((meal.items || []).map((i) => ({ ...i })));
+  const [totals, setTotals] = useState({
+    calories: meal.calories || 0,
+    protein: meal.protein || 0,
+    carbs: meal.carbs || 0,
+    fats: meal.fats || 0,
+    fiber: meal.fiber || 0,
+    sodium_mg: meal.sodium_mg || 0,
+    potassium_mg: meal.potassium_mg || 0,
+  });
+  const [fixing, setFixing] = useState(null);
+  const [wasG, setWasG] = useState("");
+  const [nowG, setNowG] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [picker, setPicker] = useState(null); // { index: null } = append, { index: i } = replace item
+
+  // Changing an item nudges the meal totals by the same amount, so they stay in sync
+  const applyDelta = (key, delta) =>
+    setTotals((t) => ({ ...t, [key]: Math.max(0, n(t[key]) + delta) }));
+
+  const setItemName = (i, value) =>
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: value } : it)));
+
+  const setItemNum = (i, key, raw) => {
+    const val = n(raw);
+    const old = n(items[i]?.[key]);
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [key]: val } : it)));
+    applyDelta(key, val - old);
+  };
+
+  const removeItem = (i) => {
+    const it = items[i];
+    setItems((prev) => prev.filter((_, idx) => idx !== i));
+    ITEM_FIELDS.forEach(({ key }) => applyDelta(key, -n(it[key])));
+    if (fixing === i) setFixing(null);
+  };
+
+  const addItem = () =>
+    setItems((prev) => [...prev, { name: "", calories: 0, protein: 0, carbs: 0, fats: 0 }]);
+
+  // Insert (or replace an item with) a real branded product at a chosen weight
+  const insertProduct = (product, grams) => {
+    const f = grams / 100;
+    const p = product.per100;
+    const entry = {
+      name: `${product.name}${product.brand ? ` — ${product.brand}` : ""} (${Math.round(grams)} g)`,
+      calories: Math.round(p.calories * f),
+      protein: Math.round(p.protein * f),
+      carbs: Math.round(p.carbs * f),
+      fats: Math.round(p.fats * f),
+    };
+    const i = picker?.index;
+    if (i == null) {
+      setItems((prev) => [...prev, entry]);
+      ITEM_FIELDS.forEach(({ key }) => applyDelta(key, entry[key]));
+    } else {
+      const old = items[i];
+      setItems((prev) => prev.map((it, idx) => (idx === i ? entry : it)));
+      ITEM_FIELDS.forEach(({ key }) => applyDelta(key, entry[key] - n(old[key])));
+    }
+    applyDelta("fiber", Math.round((p.fiber || 0) * f));
+    applyDelta("sodium_mg", Math.round((p.sodium_mg || 0) * f));
+    applyDelta("potassium_mg", Math.round((p.potassium_mg || 0) * f));
+    setPicker(null);
+  };
+
+  const startFix = (i) => {
+    setFixing(fixing === i ? null : i);
+    setWasG("");
+    setNowG("");
+  };
+
+  // Portion fix: "it said 200 g, I measured 175 g" → scale this item's numbers by 175/200
+  const applyFix = (i) => {
+    const was = n(wasG);
+    const now = n(nowG);
+    if (was <= 0 || now <= 0) return;
+    const f = now / was;
+    const it = items[i];
+    const scaled = {};
+    ITEM_FIELDS.forEach(({ key }) => {
+      scaled[key] = Math.round(n(it[key]) * f * 10) / 10;
+    });
+    setItems((prev) => prev.map((x, idx) => (idx === i ? { ...x, ...scaled } : x)));
+    ITEM_FIELDS.forEach(({ key }) => applyDelta(key, scaled[key] - n(it[key])));
+    setFixing(null);
+  };
+
+  const save = async () => {
+    if (!description.trim()) {
+      setError("Give the meal a name.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await updateMeal(meal.id, {
+        description: description.trim(),
+        meal_type: mealType,
+        items: items.filter((it) => (it.name || "").trim() || n(it.calories)),
+        calories: n(totals.calories),
+        protein: n(totals.protein),
+        carbs: n(totals.carbs),
+        fats: n(totals.fats),
+        fiber: n(totals.fiber),
+        sodium_mg: n(totals.sodium_mg),
+        potassium_mg: n(totals.potassium_mg),
+      });
+      onClose();
+    } catch (e) {
+      setError("Couldn't save the changes. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-[24px] w-full max-w-lg max-h-[90vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-heading font-bold text-lg text-[#0F172A]">Edit meal</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-[#0F172A]" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {error && (
+          <p className="mb-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-2.5">{error}</p>
+        )}
+
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Meal name</p>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full h-10 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-4"
+        />
+
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Meal type</p>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {MEAL_TYPES.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setMealType(t.value)}
+              className={`px-3.5 h-9 rounded-full text-sm font-medium border transition ${
+                mealType === t.value
+                  ? "bg-[#0F172A] text-white border-[#0F172A]"
+                  : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">Items</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={addItem}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add item
+            </button>
+            <button
+              onClick={() => setPicker({ index: null })}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              <Search className="w-3.5 h-3.5" /> Find product
+            </button>
+          </div>
+        </div>
+        {picker && (
+          <div className="mb-3">
+            <ItemProductPicker
+              title={picker.index == null ? "Add a branded product" : "Replace item with a product"}
+              onPick={insertProduct}
+              onClose={() => setPicker(null)}
+            />
+          </div>
+        )}
+        {items.length === 0 && (
+          <p className="text-xs text-[#64748B] mb-3">
+            No items recorded — add anything the scan missed underneath.
+          </p>
+        )}
+        <div className="space-y-2 mb-5">
+          {items.map((it, i) => (
+            <div key={i} className="rounded-2xl border border-[#E2E8F0] p-3 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={it.name || ""}
+                  onChange={(e) => setItemName(i, e.target.value)}
+                  placeholder="Item name"
+                  className="flex-1 h-9 rounded-xl border border-[#E2E8F0] px-2.5 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <button
+                  onClick={() => setPicker({ index: i })}
+                  title="Replace with a database product"
+                  className="h-9 w-9 rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-slate-50 flex items-center justify-center transition"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => startFix(i)}
+                  title="Fix portion amount"
+                  className={`h-9 w-9 rounded-xl border flex items-center justify-center transition ${
+                    fixing === i
+                      ? "bg-emerald-500 text-white border-emerald-500"
+                      : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+                  }`}
+                >
+                  <Scale className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => removeItem(i)}
+                  title="Remove item"
+                  className="h-9 w-9 rounded-xl border border-[#E2E8F0] bg-white text-slate-400 hover:text-rose-500 flex items-center justify-center transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {ITEM_FIELDS.map((f) => (
+                  <label key={f.key} className="block">
+                    <span className="text-[10px] text-[#64748B] font-medium">{f.label}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={it[f.key] ?? 0}
+                      onChange={(e) => setItemNum(i, f.key, e.target.value)}
+                      className={inputCls}
+                    />
+                  </label>
+                ))}
+              </div>
+              {fixing === i && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#64748B] bg-slate-50 rounded-xl px-2.5 py-2">
+                  Said
+                  <input
+                    type="number"
+                    min="0"
+                    value={wasG}
+                    onChange={(e) => setWasG(e.target.value)}
+                    placeholder="200"
+                    className="w-16 h-8 rounded-lg border border-[#E2E8F0] px-2 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  g — I measured
+                  <input
+                    type="number"
+                    min="0"
+                    value={nowG}
+                    onChange={(e) => setNowG(e.target.value)}
+                    placeholder="175"
+                    className="w-16 h-8 rounded-lg border border-[#E2E8F0] px-2 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  g
+                  <button
+                    onClick={() => applyFix(i)}
+                    disabled={!(n(wasG) > 0 && n(nowG) > 0)}
+                    className="ml-auto h-8 px-3 rounded-full bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    Scale item
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Meal totals</p>
+        <p className="text-[11px] text-[#64748B] mb-2">
+          These update automatically when you edit items — or fine-tune them yourself.
+        </p>
+        <div className="grid grid-cols-2 gap-1.5 mb-5">
+          {TOTAL_FIELDS.map((f) => (
+            <label key={f.key} className="block">
+              <span className="text-[10px] text-[#64748B] font-medium">{f.label}</span>
+              <input
+                type="number"
+                min="0"
+                value={totals[f.key]}
+                onChange={(e) => setTotals((t) => ({ ...t, [f.key]: n(e.target.value) }))}
+                className={inputCls}
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 h-11 rounded-full border border-[#E2E8F0] text-sm font-semibold text-[#64748B] hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="flex-1 h-11 rounded-full bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { Flame, Loader2 } from "lucide-react";
+
+const BURN_SCHEMA = {
+  type: "object",
+  properties: {
+    calories_burned: { type: "number" },
+    confidence: { type: "number" },
+    basis: { type: "string" },
+  },
+};
+
+const intensities = [
+  { value: "light", label: "Light" },
+  { value: "moderate", label: "Moderate" },
+  { value: "vigorous", label: "Vigorous" },
+];
+
+export default function ExerciseForm({ weightKg, onSaved }) {
+  const [name, setName] = useState("");
+  const [duration, setDuration] = useState("");
+  const [intensity, setIntensity] = useState("moderate");
+  const [estimating, setEstimating] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const mins = parseFloat(duration);
+    if (!name.trim() || !mins || mins <= 0) return;
+    setEstimating(true);
+    setError("");
+    try {
+      const weightNote = weightKg ? `${Math.round(weightKg)} kg` : "unknown weight — assume 75 kg";
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a fitness calorie-expenditure expert. Estimate the calories burned in this workout:
+Activity: "${name.trim()}"
+Duration: ${mins} minutes
+Intensity: ${intensity}
+The person weighs ${weightNote}.
+Base the estimate on standard MET values for the activity, scaled by body weight and duration. Be realistic and conservative.
+Return calories_burned (a realistic number), confidence (0-100), and basis (one short sentence naming the MET value or method used).`,
+        response_json_schema: BURN_SCHEMA,
+      });
+      const rec = await base44.entities.Exercise.create({
+        name: name.trim(),
+        duration_min: mins,
+        intensity,
+        calories_burned: Math.round(res?.calories_burned || 0),
+        confidence: res?.confidence ?? 70,
+        basis: res?.basis || "",
+        logged_at: new Date().toISOString(),
+      });
+      setName("");
+      setDuration("");
+      onSaved(rec);
+    } catch (err) {
+      setError("Couldn't estimate this workout. Please try again.");
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="rounded-[24px] bg-white border border-[#E2E8F0] p-5 shadow-sm space-y-4">
+      <h2 className="font-heading font-bold text-lg text-[#0F172A]">Log a workout</h2>
+      <div>
+        <label className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">Activity</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. outdoor run, cycling, weight session, yoga"
+          className="w-full mt-1 h-11 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1">
+          <label className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">Minutes</label>
+          <input
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            type="number"
+            min="1"
+            placeholder="30"
+            className="w-full mt-1 h-11 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">Intensity</label>
+          <div className="flex gap-1.5 mt-1">
+            {intensities.map((i) => (
+              <button
+                type="button"
+                key={i.value}
+                onClick={() => setIntensity(i.value)}
+                className={`flex-1 h-11 rounded-full text-xs font-semibold border transition ${
+                  intensity === i.value
+                    ? "bg-[#0F172A] text-white border-[#0F172A]"
+                    : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+                }`}
+              >
+                {i.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={estimating || !name.trim() || !duration}
+        className="w-full h-12 rounded-full bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2 hover:bg-emerald-600 disabled:opacity-50 transition"
+      >
+        {estimating ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" /> Estimating burn…
+          </>
+        ) : (
+          <>
+            <Flame className="w-4 h-4" /> Add workout — AI estimates the burn
+          </>
+        )}
+      </button>
+    </form>
+  );
+}
+import React from "react";
+import { Flame, Trash2, Clock } from "lucide-react";
+
+const tone = {
+  light: "bg-sky-50 text-sky-600 border-sky-200",
+  moderate: "bg-amber-50 text-amber-600 border-amber-200",
+  vigorous: "bg-rose-50 text-rose-500 border-rose-200",
+};
+
+export default function ExerciseList({ exercises, onDelete }) {
+  if (!exercises?.length) {
+    return (
+      <div className="rounded-[24px] bg-white border border-dashed border-[#E2E8F0] p-8 text-center">
+        <p className="text-sm text-[#64748B]">No workouts logged yet — add one and the AI will estimate the burn.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {exercises.map((x) => (
+        <div
+          key={x.id}
+          className="rounded-[24px] bg-white border border-[#E2E8F0] p-4 shadow-sm flex items-center gap-3"
+        >
+          <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+            <Flame className="w-5 h-5 text-rose-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-[#0F172A] truncate">{x.name}</p>
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tone[x.intensity] || tone.moderate}`}
+              >
+                {x.intensity}
+              </span>
+            </div>
+            <p className="text-xs text-[#64748B] truncate">
+              <Clock className="inline w-3 h-3 -mt-0.5 mr-0.5" />
+              {Math.round(x.duration_min)} min
+              {x.basis ? ` · ${x.basis}` : ""}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-sm font-bold text-[#0F172A] tabular-nums">{Math.round(x.calories_burned)}</p>
+            <p className="text-[10px] text-[#64748B]">kcal burned</p>
+          </div>
+          <button
+            onClick={() => onDelete(x.id)}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition shrink-0"
+            aria-label="Delete workout"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+import React from "react";
+import { jsPDF } from "jspdf";
+import { useMeals } from "@/lib/MealContext";
+import { useProfile } from "@/lib/ProfileContext";
+import { fmtWeight } from "@/lib/nutrition";
+import { Download, FileText } from "lucide-react";
+
+export default function ExportButtons() {
+  const { allMeals, targets } = useMeals();
+  const { profile, weightEntries } = useProfile();
+
+  const dailyAgg = () => {
+    const byDay = {};
+    (allMeals || []).forEach((m) => {
+      const d = new Date(m.logged_at || m.created_date);
+      if (!d.getTime()) return;
+      const key = d.toISOString().slice(0, 10);
+      const b = (byDay[key] = byDay[key] || {
+        calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium_mg: 0, potassium_mg: 0,
+      });
+      b.calories += m.calories || 0;
+      b.protein += m.protein || 0;
+      b.carbs += m.carbs || 0;
+      b.fats += m.fats || 0;
+      b.fiber += m.fiber || 0;
+      b.sodium_mg += m.sodium_mg || 0;
+      b.potassium_mg += m.potassium_mg || 0;
+    });
+    (weightEntries || []).forEach((w) => {
+      const d = new Date(w.logged_at);
+      const key = d.toISOString().slice(0, 10);
+      if (byDay[key]) byDay[key].weight_kg = w.weight_kg;
+      else byDay[key] = { weight_kg: w.weight_kg };
+    });
+    return Object.entries(byDay).sort(([a], [b]) => (a < b ? -1 : 1));
+  };
+
+  const exportCSV = () => {
+    const rows = [
+      ["Date", "Calories", "Protein g", "Carbs g", "Fats g", "Fiber g", "Sodium mg", "Potassium mg", "Weight kg"],
+    ];
+    dailyAgg().forEach(([date, b]) =>
+      rows.push([
+        date,
+        Math.round(b.calories || 0),
+        Math.round(b.protein || 0),
+        Math.round(b.carbs || 0),
+        Math.round(b.fats || 0),
+        Math.round(b.fiber || 0),
+        Math.round(b.sodium_mg || 0),
+        Math.round(b.potassium_mg || 0),
+        b.weight_kg ? b.weight_kg.toFixed(1) : "",
+      ])
+    );
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "macrolens-report.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    let y = 20;
+    doc.setFontSize(16);
+    doc.text("MacroLens Progress Report", 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, 14, y);
+    y += 10;
+    doc.setTextColor(30);
+    doc.text(
+      `Daily targets: ${targets.calories} kcal · P ${targets.protein}g · C ${targets.carbs}g · F ${targets.fats}g`,
+      14,
+      y
+    );
+    y += 8;
+    if (profile) {
+      const first = weightEntries?.[0];
+      const change = first ? profile.weight_kg - first.weight_kg : 0;
+      doc.text(
+        `Weight: ${fmtWeight(profile.weight_kg, profile.units)} (${change > 0 ? "+" : ""}${fmtWeight(change, profile.units)} since start)`,
+        14,
+        y
+      );
+      y += 10;
+    }
+    doc.setFontSize(12);
+    doc.text("Daily log", 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.text("Date         kcal    P(g)   C(g)   F(g)   Fiber  Weight", 14, y);
+    y += 6;
+    dailyAgg()
+      .slice(-30)
+      .forEach(([date, b]) => {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        const cells = [
+          date.padEnd(12),
+          String(Math.round(b.calories || 0)).padStart(6),
+          String(Math.round(b.protein || 0)).padStart(6),
+          String(Math.round(b.carbs || 0)).padStart(6),
+          String(Math.round(b.fats || 0)).padStart(6),
+          String(Math.round(b.fiber || 0)).padStart(5),
+          b.weight_kg ? b.weight_kg.toFixed(1).padStart(6) : "",
+        ];
+        doc.text(cells.join(" "), 14, y);
+        y += 5;
+      });
+    doc.save("macrolens-report.pdf");
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={exportCSV}
+        className="h-9 px-4 rounded-full bg-white border border-[#E2E8F0] text-xs font-semibold text-[#0F172A] hover:bg-slate-50 transition inline-flex items-center gap-1.5"
+      >
+        <Download className="w-3.5 h-3.5" /> CSV
+      </button>
+      <button
+        onClick={exportPDF}
+        className="h-9 px-4 rounded-full bg-white border border-[#E2E8F0] text-xs font-semibold text-[#0F172A] hover:bg-slate-50 transition inline-flex items-center gap-1.5"
+      >
+        <FileText className="w-3.5 h-3.5" /> PDF
+      </button>
+    </div>
+  );
+}
+import React from "react";
+
+export default function GoogleIcon({ className = "w-5 h-5" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    </svg>
+  );
+}
+import React, { useEffect, useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useProfile } from "@/lib/ProfileContext";
+import useToday from "@/lib/useToday";
+import { Droplets, GlassWater, CupSoda, Pencil, Check } from "lucide-react";
+
+export default function HydrationCard() {
+  const { profile, updateProfile } = useProfile();
+  const goal = profile?.water_goal_ml || 2500;
+  const today = useToday(); // rolls over at midnight so hydration resets
+  const [todayMl, setTodayMl] = useState(null);
+  const [recordId, setRecordId] = useState(null);
+  const [editGoal, setEditGoal] = useState(false);
+  const [goalVal, setGoalVal] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let rec = null;
+      try {
+        const list = await base44.entities.HydrationLog.list("-created_date", 30);
+        rec = (list || []).find(
+          (w) => new Date(w.logged_at || w.created_date).toDateString() === today
+        );
+      } catch (e) {
+        /* start at zero if the log can't be read */
+      }
+      if (cancelled) return;
+      if (rec) {
+        setTodayMl(rec.water_ml || 0);
+        setRecordId(rec.id);
+      } else {
+        // No record for this day yet — clear yesterday's so new taps start fresh
+        setTodayMl(0);
+        setRecordId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [today]);
+
+  const add = async (ml) => {
+    const next = (todayMl || 0) + ml;
+    setTodayMl(next);
+    try {
+      if (recordId) {
+        await base44.entities.HydrationLog.update(recordId, { water_ml: next });
+      } else {
+        const rec = await base44.entities.HydrationLog.create({
+          water_ml: next,
+          logged_at: new Date().toISOString(),
+        });
+        setRecordId(rec.id);
+      }
+    } catch (e) {
+      /* optimistic UI — corrected on next load */
+    }
+  };
+
+  const saveGoal = async () => {
+    const v = Number(goalVal);
+    if (!v || v <= 0) return;
+    await updateProfile({ water_goal_ml: v });
+    setEditGoal(false);
+  };
+
+  const pct = Math.min(100, ((todayMl || 0) / goal) * 100);
+
+  return (
+    <div className="rounded-[20px] bg-white border border-[#E2E8F0] p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Droplets className="w-4 h-4 text-sky-500" />
+          <h3 className="font-heading font-bold text-sm text-[#0F172A]">Hydration</h3>
+        </div>
+        <span className="text-xs font-semibold text-sky-700 tabular-nums">
+          {((todayMl || 0) / 1000).toFixed(1)}L / {(goal / 1000).toFixed(1)}L
+        </span>
+      </div>
+      <div className="h-2.5 rounded-full bg-sky-50 overflow-hidden mb-3">
+        <div className="h-2.5 rounded-full bg-sky-400 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => add(250)}
+          className="h-9 px-3.5 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold border border-sky-100 hover:bg-sky-100 transition inline-flex items-center gap-1.5"
+        >
+          <GlassWater className="w-3.5 h-3.5" /> Glass · 250ml
+        </button>
+        <button
+          onClick={() => add(500)}
+          className="h-9 px-3.5 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold border border-sky-100 hover:bg-sky-100 transition inline-flex items-center gap-1.5"
+        >
+          <CupSoda className="w-3.5 h-3.5" /> Bottle · 500ml
+        </button>
+        <button
+          onClick={() => {
+            setGoalVal(String(goal));
+            setEditGoal(true);
+          }}
+          className="ml-auto w-8 h-8 rounded-full border border-[#E2E8F0] text-[#64748B] hover:bg-slate-50 flex items-center justify-center"
+          aria-label="Edit water goal"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {editGoal && (
+        <div className="flex gap-2 mt-3">
+          <input
+            type="number"
+            value={goalVal}
+            onChange={(e) => setGoalVal(e.target.value)}
+            placeholder="Daily goal (ml)"
+            className="flex-1 h-10 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <button
+            onClick={saveGoal}
+            className="h-10 px-4 rounded-full bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1 hover:bg-emerald-600"
+          >
+            <Check className="w-3.5 h-3.5" /> Set goal
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+import React, { useState } from "react";
+import { searchProducts } from "@/lib/openfoodfacts";
+import { useProfile } from "@/lib/ProfileContext";
+import { detectCountry, countryName } from "@/lib/countries";
+import { Search, Loader2, ArrowLeft, X } from "lucide-react";
+
+// Search branded products (localized to the user's country) and pick one at a
+// chosen weight — onPick(product, grams) hands the choice back to the editor.
+export default function ItemProductPicker({ title, onPick, onClose }) {
+  const { profile } = useProfile();
+  const country = profile?.country || detectCountry();
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [chosen, setChosen] = useState(null);
+  const [grams, setGrams] = useState(100);
+
+  const run = async (e) => {
+    e.preventDefault();
+    if (!term.trim()) return;
+    setBusy(true);
+    setError("");
+    setResults(null);
+    try {
+      const found = await searchProducts(term, country);
+      setResults(found);
+      if (!found.length) setError("No products with nutrition data found — try the brand name or another spelling.");
+    } catch (err) {
+      setError(err?.message || "Search failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pick = (p) => {
+    setChosen(p);
+    setGrams(p.servingGrams || 100);
+  };
+
+  if (chosen) {
+    const f = grams / 100;
+    const p = chosen.per100;
+    return (
+      <div className="rounded-2xl border border-emerald-300 bg-emerald-50/50 p-3 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#0F172A] truncate">{chosen.name}</p>
+            {chosen.brand && <p className="text-xs text-[#64748B]">{chosen.brand}</p>}
+          </div>
+          <button
+            onClick={() => setChosen(null)}
+            className="text-slate-400 hover:text-[#0F172A] shrink-0"
+            aria-label="Back to search"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            value={grams}
+            onChange={(e) => setGrams(Math.max(0, parseFloat(e.target.value) || 0))}
+            className="w-24 h-9 rounded-xl border border-[#E2E8F0] px-2.5 text-sm text-[#0F172A] tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <span className="text-xs text-[#64748B]">grams</span>
+          <p className="ml-auto text-xs text-[#64748B] tabular-nums text-right">
+            {Math.round(p.calories * f)} cal · {Math.round(p.protein * f)}g P · {Math.round(p.carbs * f)}g C ·{" "}
+            {Math.round(p.fats * f)}g F
+          </p>
+        </div>
+        <button
+          onClick={() => grams > 0 && onPick(chosen, grams)}
+          disabled={!(grams > 0)}
+          className="w-full h-10 rounded-full bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50"
+        >
+          Use this product
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#E2E8F0] p-3 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">{title}</p>
+        <button onClick={onClose} className="text-slate-400 hover:text-[#0F172A]" aria-label="Close product search">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <p className="text-[11px] text-[#64748B]">
+        Branded products with official nutrition data — worldwide{country ? `, ${countryName(country)} ones first` : ""}.
+      </p>
+      <form onSubmit={run} className="flex gap-1.5">
+        <input
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          placeholder='e.g. "pams yogurt"'
+          className="flex-1 h-9 rounded-xl border border-[#E2E8F0] px-2.5 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="h-9 px-3.5 rounded-xl bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-600 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Search
+        </button>
+      </form>
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      {results?.length > 0 && (
+        <div className="max-h-56 overflow-y-auto rounded-xl border border-[#E2E8F0] divide-y divide-[#F1F5F9]">
+          {results.map((r, i) => (
+            <button key={i} type="button" onClick={() => pick(r)} className="w-full text-left px-3 py-2 hover:bg-emerald-50/60">
+              <p className="text-sm font-medium text-[#0F172A] truncate">
+                {r.name}
+                {r.brand ? <span className="text-[#64748B] font-normal"> — {r.brand}</span> : null}
+              </p>
+              <p className="text-[11px] text-[#64748B] tabular-nums">{Math.round(r.per100.calories)} kcal / 100 g</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+import React from "react";
+import { Outlet, Link, useLocation } from "react-router-dom";
+import { ScanLine, History as HistoryIcon, LineChart, Flame, Dumbbell } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useMeals } from "@/lib/MealContext";
+
+export default function Layout() {
+  const isMobile = useIsMobile();
+  const { pathname } = useLocation();
+  const { totals, targets } = useMeals();
+  const remaining = Math.max(0, targets.calories - (totals.calories || 0));
+
+  const nav = [
+    { to: "/", label: "Scan", icon: ScanLine },
+    { to: "/progress", label: "Progress", icon: LineChart },
+    { to: "/exercise", label: "Workouts", icon: Dumbbell },
+    { to: "/history", label: "History", icon: HistoryIcon },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#F8FAF9]">
+      {/* Desktop header */}
+      {!isMobile && (
+        <header className="sticky top-0 z-30 glass border-b border-[#E2E8F0]">
+          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center">
+                <ScanLine className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-heading font-extrabold text-xl text-[#0F172A]">MacroLens</span>
+            </Link>
+            <nav className="flex items-center gap-1">
+              {nav.map((n) => {
+                const active = pathname === n.to;
+                return (
+                  <Link
+                    key={n.to}
+                    to={n.to}
+                    className={`flex items-center gap-2 px-4 h-10 rounded-full text-sm font-semibold transition ${
+                      active ? "bg-[#0F172A] text-white" : "text-[#64748B] hover:bg-slate-100"
+                    }`}
+                  >
+                    <n.icon className="w-4 h-4" /> {n.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="flex items-center gap-2 text-sm">
+              <Flame className="w-4 h-4 text-sky-500" />
+              <span className="font-semibold text-[#0F172A] tabular-nums">{Math.round(remaining)}</span>
+              <span className="text-[#64748B]">cal left today</span>
+            </div>
+          </div>
+        </header>
+      )}
+
+      <main className={isMobile ? "pb-24" : "max-w-7xl mx-auto px-6 py-8"}>
+        <Outlet />
+      </main>
+
+      {/* Mobile bottom bar */}
+      {isMobile && (
+        <nav className="fixed bottom-0 inset-x-0 z-30 glass border-t border-[#E2E8F0] px-6 h-16 flex items-center justify-around">
+          {nav.map((n) => {
+            const active = pathname === n.to;
+            return (
+              <Link
+                key={n.to}
+                to={n.to}
+                className={`flex flex-col items-center gap-0.5 text-[11px] font-semibold ${
+                  active ? "text-emerald-600" : "text-[#64748B]"
+                }`}
+              >
+                <n.icon className="w-5 h-5" />
+                {n.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
+    </div>
+  );
+}
+import React from "react";
+import { motion } from "framer-motion";
+
+const TOKENS = {
+  calorie: "hsl(var(--calorie))",
+  protein: "hsl(var(--protein))",
+  carbs: "hsl(var(--carbs))",
+  fats: "hsl(var(--fats))",
+};
+
+export default function MacroRings({ totals, targets }) {
+  const rings = [
+    { key: "calories", label: "Calories", value: totals.calories, target: targets.calories, unit: "", color: TOKENS.calorie },
+    { key: "protein", label: "Protein", value: totals.protein, target: targets.protein, unit: "g", color: TOKENS.protein },
+    { key: "carbs", label: "Carbs", value: totals.carbs, target: targets.carbs, unit: "g", color: TOKENS.carbs },
+    { key: "fats", label: "Fats", value: totals.fats, target: targets.fats, unit: "g", color: TOKENS.fats },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {rings.map((r) => (
+        <Ring key={r.key} {...r} />
+      ))}
+    </div>
+  );
+}
+
+function Ring({ label, value, target, unit, color }) {
+  const size = 132;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.min(1, (value || 0) / (target || 1));
+  const offset = c * (1 - pct);
+  const over = (value || 0) > target;
+
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[20px] bg-white border border-[#E2E8F0] p-4">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#EEF2F6" strokeWidth={stroke} />
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            initial={{ strokeDashoffset: c }}
+            animate={{ strokeDashoffset: offset }}
+            transition={{ duration: 0.9, ease: "easeOut" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold font-heading text-[#0F172A] tabular-nums">
+            {Math.round(value || 0)}
+            <span className="text-sm font-medium text-[#64748B]">{unit}</span>
+          </span>
+          <span className="text-[11px] text-[#64748B] mt-0.5">of {target}{unit}</span>
+        </div>
+      </div>
+      <span className="mt-2 text-sm font-semibold text-[#0F172A]">{label}</span>
+      {over && <span className="text-[11px] text-amber-500 font-medium">over target</span>}
+    </div>
+  );
+}
+import React, { useState } from "react";
+import { Flame, Beef, Wheat, Droplet, Trash2, Pencil } from "lucide-react";
+import { Image } from "@/components/ui/image";
+import EditMealDialog from "@/components/EditMealDialog";
+
+const mealTypeLabel = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
+
+export default function MealLog({ meals, onDelete }) {
+  const [editing, setEditing] = useState(null);
+
+  if (!meals.length) {
+    return (
+      <div className="rounded-[20px] bg-white border border-[#E2E8F0] p-8 text-center">
+        <p className="text-sm text-[#64748B]">No meals logged yet. Scan your first plate to start tracking.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {meals.map((m) => (
+        <div key={m.id} className="flex gap-3 rounded-[20px] bg-white border border-[#E2E8F0] p-3">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
+            {m.photo_url && <Image src={m.photo_url} fittingType="fill" className="w-full h-full" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[#0F172A] truncate">{m.description}</p>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setEditing(m)}
+                  className="text-slate-300 hover:text-emerald-600"
+                  aria-label="Edit meal"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onDelete(m.id)}
+                  className="text-slate-300 hover:text-rose-500"
+                  aria-label="Delete meal"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-[#64748B] mb-1.5">{mealTypeLabel[m.meal_type] || "Snack"}</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium">
+              <span className="inline-flex items-center gap-1 text-sky-600"><Flame className="w-3 h-3" />{Math.round(m.calories)} cal</span>
+              <span className="inline-flex items-center gap-1 text-violet-600"><Beef className="w-3 h-3" />{Math.round(m.protein)}g</span>
+              <span className="inline-flex items-center gap-1 text-amber-600"><Wheat className="w-3 h-3" />{Math.round(m.carbs)}g</span>
+              <span className="inline-flex items-center gap-1 text-rose-500"><Droplet className="w-3 h-3" />{Math.round(m.fats)}g</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      {editing && <EditMealDialog meal={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+import React from "react";
+import { Outlet } from "react-router-dom";
+import { useProfile } from "@/lib/ProfileContext";
+import Onboarding from "@/pages/Onboarding";
+
+export default function OnboardingGate() {
+  const { profile, loading } = useProfile();
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-[#F8FAF9]">
+        <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!profile) return <Onboarding />;
+  return <Outlet />;
+}
+import React, { useState } from "react";
+import { useProfile } from "@/lib/ProfileContext";
+import { MACRO_SPLITS } from "@/lib/nutrition";
+import { cn } from "@/lib/utils";
+import { SlidersHorizontal, Wand2 } from "lucide-react";
+
+export default function PlanCard() {
+  const { profile, targets, updateProfile } = useProfile();
+  const split = profile?.macro_split || "balanced";
+  const [saving, setSaving] = useState(false);
+  const [custom, setCustom] = useState({
+    protein: profile?.custom_protein ?? "",
+    carbs: profile?.custom_carbs ?? "",
+    fats: profile?.custom_fats ?? "",
+  });
+
+  const choose = async (value) => {
+    setSaving(true);
+    try {
+      await updateProfile({ macro_split: value });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveCustom = async () => {
+    setSaving(true);
+    try {
+      await updateProfile({
+        macro_split: "custom",
+        custom_protein: Number(custom.protein) || 0,
+        custom_carbs: Number(custom.carbs) || 0,
+        custom_fats: Number(custom.fats) || 0,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const customKeys = ["protein", "carbs", "fats"];
+
+  return (
+    <div className="rounded-[20px] bg-white border border-[#E2E8F0] p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
+        <h2 className="font-heading font-bold text-base text-[#0F172A]">Your plan</h2>
+      </div>
+      <p className="text-xs text-[#64748B] mb-4">
+        Current targets: {targets.calories} kcal · P {targets.protein}g · C {targets.carbs}g · F {targets.fats}g
+      </p>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {MACRO_SPLITS.map((s) => (
+          <button
+            key={s.value}
+            onClick={() => choose(s.value)}
+            disabled={saving}
+            className={cn(
+              "px-3.5 h-9 rounded-full text-sm font-medium border transition disabled:opacity-50",
+              split === s.value
+                ? "bg-[#0F172A] text-white border-[#0F172A]"
+                : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {split === "custom" && (
+        <div className="space-y-2 mb-3">
+          <div className="grid grid-cols-3 gap-2">
+            {customKeys.map((k) => (
+              <div key={k}>
+                <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">{k} (g)</label>
+                <input
+                  type="number"
+                  value={custom[k]}
+                  onChange={(e) => setCustom((c) => ({ ...c, [k]: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-[#E2E8F0] px-3 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={saveCustom}
+            disabled={saving}
+            className="h-10 w-full rounded-full bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition"
+          >
+            {saving ? "Saving…" : "Save custom grams"}
+          </button>
+        </div>
+      )}
+      {profile?.tdee_adjustment ? (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2 flex items-center gap-1.5">
+          <Wand2 className="w-3.5 h-3.5 shrink-0" />
+          Adaptive adjustment active: {profile.tdee_adjustment > 0 ? "+" : ""}
+          {profile.tdee_adjustment} kcal/day, auto-tuned from your weight trend.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+import React, { useState, useEffect, useRef } from "react";
+import { base44 } from "@/api/base44Client";
+import { Flame, Beef, Wheat, Droplet, RotateCcw, Loader2 } from "lucide-react";
+
+const DENSITY_SCHEMA = {
+  type: "object",
+  properties: { grams_per_cup: { type: "number" }, note: { type: "string" } },
+};
+
+const UNITS = ["g", "ml", "tsp", "tbsp", "cup"];
+const CUP_CHIPS = [
+  ["1/4", 0.25],
+  ["1/3", 0.33],
+  ["1/2", 0.5],
+  ["2/3", 0.67],
+  ["3/4", 0.75],
+  ["1", 1],
+  ["2", 2],
+];
+
+const gramsFor = (unit, qty, gPerCup) => {
+  if (unit === "g") return qty;
+  if (!gPerCup) return null;
+  if (unit === "ml") return (qty * gPerCup) / 240;
+  if (unit === "tsp") return (qty * gPerCup) / 48;
+  if (unit === "tbsp") return (qty * gPerCup) / 16;
+  return qty * gPerCup; // cup
+};
+
+export default function PortionCard({ product, onResult, onBack, backLabel = "Back" }) {
+  const [unit, setUnit] = useState("g");
+  const [qty, setQty] = useState(product.servingGrams || 100);
+  const [gramsPerCup, setGramsPerCup] = useState(null);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
+  const attempted = useRef(false);
+
+  // One AI density estimate per product, made when a volume unit is first picked
+  useEffect(() => {
+    if (unit === "g" || gramsPerCup || attempted.current) return;
+    attempted.current = true;
+    let cancelled = false;
+    setConverting(true);
+    setConvertError("");
+    base44.integrations.Core.InvokeLLM({
+      prompt: `Estimate how many grams of "${product.name}"${
+        product.brand ? ` (brand: ${product.brand})` : ""
+      } fill one standard US cup (240 ml). Use the typical density and packing of this food — e.g. all-purpose flour ~120 g/cup, granulated sugar ~200 g/cup, milk ~240 g/cup, rolled oats ~90 g/cup. Return grams_per_cup (a realistic number) and note (a very short explanation).`,
+      response_json_schema: DENSITY_SCHEMA,
+    })
+      .then((res) => {
+        if (!cancelled) setGramsPerCup(Math.max(1, Math.round(res?.grams_per_cup || 0)));
+      })
+      .catch(() => {
+        if (!cancelled) setConvertError("Couldn't convert that unit — enter grams instead.");
+      })
+      .finally(() => {
+        if (!cancelled) setConverting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [unit, gramsPerCup, product.name, product.brand]);
+
+  const changeUnit = (u) => {
+    if (u === unit) return;
+    setUnit(u);
+    if (u === "g") setQty(product.servingGrams || 100);
+    else if (unit === "g") setQty(1);
+  };
+
+  const grams = gramsFor(unit, qty, gramsPerCup);
+  const f = grams != null ? grams / 100 : null;
+  const p100 = product.per100;
+  const fmtQty = Number.isInteger(qty) ? qty : +(+qty).toFixed(2);
+
+  const stats = [
+    { icon: Flame, label: "Cal", value: f != null ? Math.round(p100.calories * f) : null, color: "text-sky-600 bg-sky-50" },
+    { icon: Beef, label: "Protein", value: f != null ? `${Math.round(p100.protein * f)}g` : null, color: "text-violet-600 bg-violet-50" },
+    { icon: Wheat, label: "Carbs", value: f != null ? `${Math.round(p100.carbs * f)}g` : null, color: "text-amber-600 bg-amber-50" },
+    { icon: Droplet, label: "Fats", value: f != null ? `${Math.round(p100.fats * f)}g` : null, color: "text-rose-500 bg-rose-50" },
+  ];
+
+  const confirm = () => {
+    const portion = `${fmtQty} ${unit} ≈ ${Math.round(grams)} g`;
+    onResult({
+      description: `${product.name}${product.brand ? ` — ${product.brand}` : ""} (${portion})`,
+      calories: Math.round(p100.calories * f),
+      calories_low: Math.round(p100.calories * f * 0.95),
+      calories_high: Math.round(p100.calories * f * 1.05),
+      protein: Math.round(p100.protein * f),
+      carbs: Math.round(p100.carbs * f),
+      fats: Math.round(p100.fats * f),
+      fiber: Math.round(p100.fiber * f),
+      sodium_mg: Math.round(p100.sodium_mg * f),
+      potassium_mg: Math.round(p100.potassium_mg * f),
+      confidence: 90,
+      items: [
+        {
+          name: `${product.name} (${portion})`,
+          calories: Math.round(p100.calories * f),
+          protein: Math.round(p100.protein * f),
+          carbs: Math.round(p100.carbs * f),
+          fats: Math.round(p100.fats * f),
+        },
+      ],
+    });
+  };
+
+  return (
+    <div className="rounded-[24px] bg-white border border-[#E2E8F0] p-5 shadow-sm">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="font-heading font-bold text-lg text-[#0F172A]">{product.name}</h3>
+          {product.brand && <p className="text-xs text-[#64748B]">{product.brand}</p>}
+        </div>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#64748B] hover:text-[#0F172A]"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> {backLabel}
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">Portion</p>
+      <div className="flex flex-wrap gap-1.5 mt-1 mb-3">
+        {UNITS.map((u) => (
+          <button
+            key={u}
+            onClick={() => changeUnit(u)}
+            className={`px-3.5 h-9 rounded-full text-sm font-medium border transition ${
+              unit === u
+                ? "bg-[#0F172A] text-white border-[#0F172A]"
+                : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+            }`}
+          >
+            {u}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          type="number"
+          min="0.01"
+          step={unit === "g" ? 1 : 0.25}
+          value={qty}
+          onChange={(e) => setQty(Math.max(0, parseFloat(e.target.value) || 0))}
+          className="w-28 h-11 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <span className="text-sm text-[#64748B]">{unit === "g" ? "grams" : unit}</span>
+      </div>
+      {unit === "cup" && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {CUP_CHIPS.map(([label, value]) => (
+            <button
+              key={label}
+              onClick={() => setQty(value)}
+              className={`px-3 h-8 rounded-full text-xs font-semibold border transition ${
+                qty === value
+                  ? "bg-emerald-500 text-white border-emerald-500"
+                  : "bg-white text-[#64748B] border-[#E2E8F0] hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {unit !== "g" && (
+        <p className="text-xs text-[#64748B] mb-3">
+          {converting ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Converting to grams…
+            </span>
+          ) : convertError ? (
+            <span className="text-rose-500">{convertError}</span>
+          ) : gramsPerCup ? (
+            <>≈ {Math.round(grams)} g (about {gramsPerCup} g per cup of this food)</>
+          ) : null}
+        </p>
+      )}
+
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        {stats.map((s) => (
+          <div key={s.label} className={`rounded-2xl p-2.5 flex flex-col items-center gap-1 ${s.color.split(" ")[1]}`}>
+            <s.icon className={`w-4 h-4 ${s.color.split(" ")[0]}`} />
+            <span className="text-sm font-bold text-[#0F172A] tabular-nums">{s.value ?? "—"}</span>
+            <span className="text-[10px] text-[#64748B] font-medium">{s.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        <MiniStat label="Fiber" value={f != null ? `${Math.round(p100.fiber * f)}g` : "—"} />
+        <MiniStat label="Sodium" value={f != null ? `${Math.round(p100.sodium_mg * f)}mg` : "—"} />
+        <MiniStat label="Potassium" value={f != null ? `${Math.round(p100.potassium_mg * f)}mg` : "—"} />
+      </div>
+
+      <button
+        onClick={confirm}
+        disabled={f == null || f <= 0}
+        className="w-full h-12 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 disabled:opacity-50 transition"
+      >
+        Use these macros
+      </button>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 py-2 text-center">
+      <p className="text-xs font-bold text-[#0F172A] tabular-nums">{value}</p>
+      <p className="text-[10px] text-[#64748B] font-medium">{label}</p>
+    </div>
+  );
+}
+import React, { useState, useEffect, useRef } from "react";
+import PortionCard from "@/components/PortionCard";
+import { searchProducts, suggestProducts } from "@/lib/openfoodfacts";
+import { useProfile } from "@/lib/ProfileContext";
+import { detectCountry, countryName } from "@/lib/countries";
+import { Search, Loader2 } from "lucide-react";
+
+export default function ProductSearch({ onResult }) {
+  const { profile } = useProfile();
+  const country = profile?.country || detectCountry();
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [product, setProduct] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const suggestTimer = useRef(null);
+
+  // Related-products dropdown while typing (debounced)
+  useEffect(() => {
+    const q = term.trim();
+    if (q.length < 3 || product) {
+      setSuggestions([]);
+      return;
+    }
+    clearTimeout(suggestTimer.current);
+    suggestTimer.current = setTimeout(async () => {
+      try {
+        const found = await suggestProducts(q, country);
+        setSuggestions(found.slice(0, 6));
+      } catch (e) {
+        /* dropdown is best-effort; full search reports errors */
+      }
+    }, 600);
+    return () => clearTimeout(suggestTimer.current);
+  }, [term, product, country]);
+
+  const pick = (p) => {
+    setProduct(p);
+    setSuggestions([]);
+    setShowSuggest(false);
+  };
+
+  const run = async (e) => {
+    e.preventDefault();
+    const q = term.trim();
+    if (!q) return;
+    setShowSuggest(false);
+    setBusy(true);
+    setError("");
+    setResults(null);
+    setProduct(null);
+    try {
+      const found = await searchProducts(q, country);
+      if (!found.length) {
+        setError("No products with nutrition data found — check the spelling or try the brand name.");
+      }
+      setResults(found);
+    } catch (err) {
+      setError(err?.message || "Search failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (product) {
+    return (
+      <PortionCard product={product} onResult={onResult} onBack={() => setProduct(null)} backLabel="New search" />
+    );
+  }
+
+  return (
+    <form onSubmit={run} className="rounded-[24px] bg-white border border-[#E2E8F0] p-5 shadow-sm">
+      <h3 className="font-heading font-bold text-lg text-[#0F172A] mb-1">Search branded foods</h3>
+      <p className="text-xs text-[#64748B] mb-4">
+        Type a brand (e.g. “pams”) to list its products, or a food name. Millions of products with official
+        nutrition data — every product worldwide{country ? `, ${countryName(country)} ones boosted to the top` : ""}.
+      </p>
+      <div className="relative">
+        <div className="flex gap-2">
+          <input
+            value={term}
+            onChange={(e) => {
+              setTerm(e.target.value);
+              setShowSuggest(true);
+            }}
+            onFocus={() => setShowSuggest(true)}
+            placeholder='e.g. "pams" or "blueberry yogurt"'
+            className="flex-1 h-12 rounded-full border border-[#E2E8F0] px-4 text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <button
+            type="submit"
+            disabled={busy || !term.trim()}
+            className="h-12 px-5 rounded-full bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 hover:bg-emerald-600 disabled:opacity-50 transition"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            Search
+          </button>
+        </div>
+        {showSuggest && suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-13 z-10 mt-1 rounded-2xl bg-white border border-[#E2E8F0] shadow-lg overflow-hidden">
+            {suggestions.map((r, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => pick(r)}
+                className="w-full text-left px-4 py-2.5 hover:bg-emerald-50/60 transition"
+              >
+                <p className="text-sm font-medium text-[#0F172A] truncate">
+                  {r.name}
+                  {r.brand ? <span className="text-[#64748B] font-normal"> — {r.brand}</span> : null}
+                </p>
+                <p className="text-[11px] text-[#64748B] tabular-nums">{Math.round(r.per100.calories)} kcal / 100 g</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {busy && <p className="text-xs text-[#64748B] mt-3">Searching the food database…</p>}
+      {error && (
+        <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3">{error}</p>
+      )}
+      {results?.length > 0 && (
+        <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
+          {results.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => pick(r)}
+              className="w-full text-left rounded-2xl border border-[#E2E8F0] p-3 hover:border-emerald-400 hover:bg-emerald-50/40 transition"
+            >
+              <p className="text-sm font-semibold text-[#0F172A] truncate">
+                {r.name}
+                {r.brand ? <span className="text-[#64748B] font-medium"> — {r.brand}</span> : null}
+              </p>
+              <p className="text-xs text-[#64748B] mt-0.5 tabular-nums">
+                {Math.round(r.per100.calories)} kcal / 100 g · {Math.round(r.per100.protein)}g P ·{" "}
+                {Math.round(r.per100.carbs)}g C · {Math.round(r.per100.fats)}g F
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
+  );
+}
+import React, { useEffect, useRef, useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useProfile } from "@/lib/ProfileContext";
+import { Image } from "@/components/ui/image";
+import { fmtWeight } from "@/lib/nutrition";
+import { Camera, Plus, X, Lock } from "lucide-react";
+
+export default function ProgressPhotos() {
+  const { profile } = useProfile();
+  const [photos, setPhotos] = useState(null);
+  const [urls, setUrls] = useState({});
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await base44.entities.ProgressPhoto.list("-created_date", 60);
+        setPhotos(list || []);
+        (list || []).forEach(async (p) => {
+          try {
+            const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({
+              file_uri: p.file_uri,
+              expires_in: 3600,
+            });
+            setUrls((u) => ({ ...u, [p.id]: signed_url }));
+          } catch (e) {
+            /* skip broken photo */
+          }
+        });
+      } catch (e) {
+        setPhotos([]);
+      }
+    })();
+  }, []);
+
+  const upload = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { file_uri } = await base44.integrations.Core.UploadPrivateFile({ file });
+      const rec = await base44.entities.ProgressPhoto.create({
+        file_uri,
+        taken_at: new Date().toISOString(),
+        weight_kg: profile?.weight_kg,
+      });
+      const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({
+        file_uri,
+        expires_in: 3600,
+      });
+      setUrls((u) => ({ ...u, [rec.id]: signed_url }));
+      setPhotos((p) => [rec, ...(p || [])]);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const remove = async (id) => {
+    await base44.entities.ProgressPhoto.delete(id);
+    setPhotos((p) => p.filter((x) => x.id !== id));
+  };
+
+  return (
+    <div className="rounded-[20px] bg-white border border-[#E2E8F0] p-5">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Camera className="w-4 h-4 text-emerald-500" />
+          <h2 className="font-heading font-bold text-base text-[#0F172A]">Progress photos</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="h-9 px-4 rounded-full bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-600 disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Add photo"}
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            upload(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <p className="text-[11px] text-[#64748B] mb-3 flex items-center gap-1">
+        <Lock className="w-3 h-3" /> Stored privately — only you can see these.
+      </p>
+      {!photos?.length ? (
+        <p className="text-xs text-[#64748B] py-4 text-center">
+          Add a photo every couple of weeks to see body changes the scale can't show.
+        </p>
+      ) : (
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {photos.map((p) => (
+            <div key={p.id} className="relative w-36 shrink-0">
+              <div className="w-36 h-44 rounded-2xl overflow-hidden bg-slate-100">
+                {urls[p.id] && <Image src={urls[p.id]} fittingType="fill" className="w-full h-full" />}
+              </div>
+              <button
+                onClick={() => remove(p.id)}
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full glass text-slate-600 flex items-center justify-center"
+                aria-label="Delete photo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+              <p className="text-[11px] text-[#64748B] mt-1 text-center">
+                {new Date(p.taken_at || p.created_date).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
+                {p.weight_kg ? ` · ${fmtWeight(p.weight_kg, profile.units)}` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+import { useEffect } from 'react';
+import { Outlet } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
+import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+
+const DefaultFallback = () => (
+  <div className="fixed inset-0 flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+  </div>
+);
+
+export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement }) {
+  const { isAuthenticated, isLoadingAuth, authChecked, authError, checkUserAuth } = useAuth();
+
+  useEffect(() => {
+    if (!authChecked && !isLoadingAuth) {
+      checkUserAuth();
+    }
+  }, [authChecked, isLoadingAuth, checkUserAuth]);
+
+  if (isLoadingAuth || !authChecked) {
+    return fallback;
+  }
+
+  if (authError) {
+    if (authError.type === 'user_not_registered') {
+      return <UserNotRegisteredError />;
+    }
+    return unauthenticatedElement;
+  }
+
+  if (!isAuthenticated) {
+    return unauthenticatedElement;
+  }
+
+  return <Outlet />;
+}
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useProfile } from "@/lib/ProfileContext";
+import { RotateCcw } from "lucide-react";
+
+export default function ResetProfileButton() {
+  const { refresh } = useProfile();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const reset = async () => {
+    setBusy(true);
+    try {
+      const me = await base44.auth.me();
+      await base44.entities.Profile.deleteMany({ created_by_id: me.id });
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-white border border-[#E2E8F0] text-sm font-semibold text-[#64748B] hover:bg-slate-50 transition"
+      >
+        <RotateCcw className="w-4 h-4" /> Reset my details
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-[#64748B] font-medium">Redo setup?</span>
+      <button
+        onClick={() => setConfirming(false)}
+        disabled={busy}
+        className="h-10 px-4 rounded-full bg-white border border-[#E2E8F0] text-sm font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-50"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={reset}
+        disabled={busy}
+        className="h-10 px-4 rounded-full bg-rose-500 text-white text-sm font-semibold hover:bg-rose-600 disabled:opacity-50"
+      >
+        {busy ? "Resetting…" : "Yes, redo setup"}
+      </button>
+    </div>
+  );
+}
+import React, { useRef, useState, useEffect } from "react";
+import { Camera, Upload, X, Image as ImageIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export default function ScannerDropzone({ onPhoto, analyzing, hint = "Point at your plate", analyzingText = "Analyzing your plate…" }) {
+  const fileRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [mode, setMode] = useState("idle"); // idle | camera
+  const [camError, setCamError] = useState("");
+  const [preview, setPreview] = useState(null);
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  const startCamera = async () => {
+    setCamError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setMode("camera");
+      // wait for next tick to attach
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 50);
+    } catch (e) {
+      setCamError("Camera unavailable — upload a photo instead.");
+      setMode("idle");
+    }
+  };
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1080;
+    canvas.height = video.videoHeight || 1080;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" });
+      setPreview(URL.createObjectURL(file));
+      onPhoto(file);
+      stopCamera();
+      setMode("idle");
+    }, "image/jpeg", 0.92);
+  };
+
+  const onFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so the same photo file can be picked again for the next meal
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    onPhoto(file);
+  };
+
+  const reset = () => {
+    setPreview(null);
+    setMode("idle");
+  };
+
+  return (
+    <div className="relative w-full">
+      {/* HUD camera / preview stage */}
+      <div className="relative aspect-[4/3] sm:aspect-square w-full overflow-hidden rounded-[24px] bg-slate-900 border border-[#E2E8F0] shadow-sm">
+        {mode === "camera" ? (
+          <>
+            <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+            <HUDGrid />
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 glass-dark text-white text-xs font-semibold px-3 py-1.5 rounded-full">
+              {hint}
+            </div>
+            {analyzing && <ScanSweep />}
+          </>
+        ) : preview ? (
+          <>
+            <img src={preview} alt="capture" className="absolute inset-0 w-full h-full object-cover" />
+            {analyzing && (
+              <div className="absolute inset-0 glass flex flex-col items-center justify-center gap-3">
+                <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
+                <p className="text-sm font-semibold text-[#0F172A]">{analyzingText}</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <button
+            onClick={startCamera}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/90 hover:bg-slate-800/40 transition"
+          >
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
+              <Camera className="w-7 h-7 text-emerald-300" />
+            </div>
+            <span className="text-sm font-semibold">Tap to open camera</span>
+            <span className="text-xs text-white/60">or use upload below</span>
+          </button>
+        )}
+      </div>
+
+      {camError && <p className="mt-2 text-xs text-rose-500">{camError}</p>}
+
+      {/* Controls */}
+      <div className="mt-4 flex items-center justify-center gap-4">
+        {mode === "camera" ? (
+          <>
+            <button
+              onClick={capture}
+              disabled={analyzing}
+              className="relative w-18 h-18 rounded-full bg-white border-4 border-emerald-500 shadow-lg flex items-center justify-center animate-pulse-ring disabled:opacity-50"
+              style={{ width: 72, height: 72 }}
+              aria-label="Capture"
+            >
+              <span className="w-12 h-12 rounded-full bg-emerald-500" />
+            </button>
+            <button
+              onClick={() => { stopCamera(); setMode("idle"); }}
+              className="w-11 h-11 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-slate-500"
+              aria-label="Close camera"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={startCamera}
+              disabled={analyzing}
+              className="flex items-center gap-2 px-5 h-12 rounded-full bg-[#0F172A] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+            >
+              <Camera className="w-4 h-4" /> Camera
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={analyzing}
+              className="flex items-center gap-2 px-5 h-12 rounded-full bg-white border border-[#E2E8F0] text-[#0F172A] text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" /> Upload
+            </button>
+            {preview && (
+              <button
+                onClick={reset}
+                disabled={analyzing}
+                className="w-11 h-11 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                aria-label="Clear"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
+      </div>
+    </div>
+  );
+}
+
+function HUDGrid() {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+        {Array.from({ length: 9 }).map((_, i) => (
+          <div key={i} className="border border-emerald-400/20" />
+        ))}
+      </div>
+      {/* corner brackets */}
+      <div className="absolute top-6 left-6 w-8 h-8 border-l-2 border-t-2 border-emerald-400 rounded-tl-lg" />
+      <div className="absolute top-6 right-6 w-8 h-8 border-r-2 border-t-2 border-emerald-400 rounded-tr-lg" />
+      <div className="absolute bottom-6 left-6 w-8 h-8 border-l-2 border-b-2 border-emerald-400 rounded-bl-lg" />
+      <div className="absolute bottom-6 right-6 w-8 h-8 border-r-2 border-b-2 border-emerald-400 rounded-br-lg" />
+    </div>
+  );
+}
+
+function ScanSweep() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute left-0 right-0 h-1 bg-emerald-400/80 shadow-[0_0_20px_4px_rgba(16,185,129,0.6)] animate-scan-sweep" />
+    </div>
+  );
+}
