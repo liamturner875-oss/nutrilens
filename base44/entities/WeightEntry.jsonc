@@ -1,0 +1,17 @@
+{
+  "name": "WeightEntry",
+  "type": "object",
+  "properties": {
+    "weight_kg": {
+      "type": "number",
+      "description": "Weigh-in weight in kg (stored metric)"
+    },
+    "logged_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "weight_kg"
+  ]
+}
