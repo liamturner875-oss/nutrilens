@@ -1,0 +1,21 @@
+{
+  "name": "ProgressPhoto",
+  "type": "object",
+  "properties": {
+    "file_uri": {
+      "type": "string",
+      "description": "Private storage URI of the progress photo"
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "weight_kg": {
+      "type": "number",
+      "description": "Weight at the time the photo was taken"
+    }
+  },
+  "required": [
+    "file_uri"
+  ]
+}
