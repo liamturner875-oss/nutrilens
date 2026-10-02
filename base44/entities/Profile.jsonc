@@ -1,0 +1,118 @@
+{
+  "name": "Profile",
+  "type": "object",
+  "properties": {
+    "units": {
+      "type": "string",
+      "enum": [
+        "metric",
+        "imperial"
+      ]
+    },
+    "country": {
+      "type": "string",
+      "description": "Two-letter country code (nz, au, uk, \u2026) used to localize branded product searches"
+    },
+    "age": {
+      "type": "number",
+      "description": "Age in years"
+    },
+    "sex": {
+      "type": "string",
+      "enum": [
+        "male",
+        "female"
+      ]
+    },
+    "weight_kg": {
+      "type": "number",
+      "description": "Current weight in kg (stored metric)"
+    },
+    "height_cm": {
+      "type": "number",
+      "description": "Height in cm (stored metric)"
+    },
+    "goal": {
+      "type": "string",
+      "enum": [
+        "lose_weight",
+        "slight_deficit",
+        "maintain",
+        "lean_bulk",
+        "bulk"
+      ]
+    },
+    "activity_level": {
+      "type": "string",
+      "enum": [
+        "sedentary",
+        "light",
+        "moderate",
+        "very_active"
+      ]
+    },
+    "goal_weight_kg": {
+      "type": "number",
+      "description": "Optional target weight in kg"
+    },
+    "macro_split": {
+      "type": "string",
+      "enum": [
+        "balanced",
+        "high_protein",
+        "keto",
+        "bulk",
+        "custom"
+      ],
+      "description": "Preferred macro distribution preset",
+      "default": "balanced"
+    },
+    "custom_protein": {
+      "type": "number",
+      "description": "Custom protein target in grams"
+    },
+    "custom_carbs": {
+      "type": "number",
+      "description": "Custom carb target in grams"
+    },
+    "custom_fats": {
+      "type": "number",
+      "description": "Custom fat target in grams"
+    },
+    "tdee_adjustment": {
+      "type": "number",
+      "description": "Auto-tuned calorie adjustment from weight trend adaptation"
+    },
+    "water_goal_ml": {
+      "type": "number",
+      "description": "Daily water goal in ml",
+      "default": 2500
+    },
+    "fiber_goal": {
+      "type": "number",
+      "description": "Daily fiber goal in grams",
+      "default": 30
+    },
+    "target_calories": {
+      "type": "number"
+    },
+    "target_protein": {
+      "type": "number"
+    },
+    "target_carbs": {
+      "type": "number"
+    },
+    "target_fats": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "units",
+    "age",
+    "sex",
+    "weight_kg",
+    "height_cm",
+    "goal",
+    "activity_level"
+  ]
+}
