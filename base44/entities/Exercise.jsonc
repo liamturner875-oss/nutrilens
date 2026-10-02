@@ -1,0 +1,44 @@
+{
+  "name": "Exercise",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Activity name, e.g. outdoor run, cycling, weight session"
+    },
+    "duration_min": {
+      "type": "number",
+      "description": "Duration in minutes"
+    },
+    "intensity": {
+      "type": "string",
+      "enum": [
+        "light",
+        "moderate",
+        "vigorous"
+      ],
+      "default": "moderate"
+    },
+    "calories_burned": {
+      "type": "number",
+      "description": "AI-estimated calories burned"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score 0-100"
+    },
+    "basis": {
+      "type": "string",
+      "description": "Short explanation of how the estimate was calculated (MET value etc.)"
+    },
+    "logged_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "name",
+    "duration_min",
+    "calories_burned"
+  ]
+}
