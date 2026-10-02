@@ -1,0 +1,50 @@
+{
+  "name": "Template",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Display name for the quick-add tile"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description logged with the meal"
+    },
+    "calories": {
+      "type": "number"
+    },
+    "protein": {
+      "type": "number"
+    },
+    "carbs": {
+      "type": "number"
+    },
+    "fats": {
+      "type": "number"
+    },
+    "fiber": {
+      "type": "number"
+    },
+    "sodium_mg": {
+      "type": "number"
+    },
+    "potassium_mg": {
+      "type": "number"
+    },
+    "meal_type": {
+      "type": "string",
+      "enum": [
+        "breakfast",
+        "lunch",
+        "dinner",
+        "snack"
+      ],
+      "default": "snack"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "calories"
+  ]
+}
