@@ -1,0 +1,17 @@
+{
+  "name": "HydrationLog",
+  "type": "object",
+  "properties": {
+    "water_ml": {
+      "type": "number",
+      "description": "Total water consumed today in ml"
+    },
+    "logged_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "water_ml"
+  ]
+}
