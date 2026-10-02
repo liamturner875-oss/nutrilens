@@ -1,0 +1,97 @@
+{
+  "name": "Meal",
+  "type": "object",
+  "properties": {
+    "photo_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Public URL of the food photo (optional for text-logged meals)"
+    },
+    "description": {
+      "type": "string",
+      "description": "AI-identified description of the meal"
+    },
+    "calories": {
+      "type": "number",
+      "description": "Estimated total calories"
+    },
+    "original_calories": {
+      "type": "number",
+      "description": "The AI's original estimate before any user correction"
+    },
+    "correction_text": {
+      "type": "string",
+      "description": "User's correction note that adjusted the AI estimate"
+    },
+    "protein": {
+      "type": "number",
+      "description": "Estimated protein in grams"
+    },
+    "carbs": {
+      "type": "number",
+      "description": "Estimated carbohydrates in grams"
+    },
+    "fats": {
+      "type": "number",
+      "description": "Estimated fats in grams"
+    },
+    "fiber": {
+      "type": "number",
+      "description": "Estimated fiber in grams"
+    },
+    "sodium_mg": {
+      "type": "number",
+      "description": "Estimated sodium in milligrams"
+    },
+    "potassium_mg": {
+      "type": "number",
+      "description": "Estimated potassium in milligrams"
+    },
+    "meal_type": {
+      "type": "string",
+      "enum": [
+        "breakfast",
+        "lunch",
+        "dinner",
+        "snack"
+      ],
+      "default": "snack"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Nutritional confidence score 0-100"
+    },
+    "items": {
+      "type": "array",
+      "description": "Breakdown of individual food items detected",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "calories": {
+            "type": "number"
+          },
+          "protein": {
+            "type": "number"
+          },
+          "carbs": {
+            "type": "number"
+          },
+          "fats": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "logged_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "description",
+    "calories"
+  ]
+}
