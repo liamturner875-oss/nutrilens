@@ -30,4 +30,7 @@ export function Toaster() {
       <ToastViewport />
     </ToastProvider>
   );
-} 
+}
+
+export default Toaster;
+
